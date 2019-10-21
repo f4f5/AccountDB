@@ -1,33 +1,52 @@
 
 const Koa = require('koa');
-const views = require('koa-views');
-const nunjucks = require('nunjucks');
 const json = require('koa-json');
-const bodyparser = require('koa-bodyparser')();
-const logger = require('koa-logger');
-const onerror = require('koa-onerror');
+const koaBody = require('koa-body');
+const router = require('koa-router')();
+const config = require('./nodeconfig');
 const app = new Koa();
-nunjucks.configure('views', { autoescape: true });
 
 // middle wares
-app.use(bodyparser);
+app.use(koaBody({ multipart: true }));
 app.use(json());
-app.use(logger());
 
-// logger
 app.use(async function (ctx, next) {
     const start = new Date();
     await next();
     const ms = new Date() - start;
     console.log(`${ctx.method} ${ctx.url} - ${ms}ms`);
 });
-// routes
-
-app.use(router.routes(), router.allowedMethods());
 
 // error handler
+app.use(async function(ctx, next) {
+    try {
+      await next();
+    } catch (err) {
+      // some errors will have .status
+      // however this is not a guarantee
+      ctx.status = err.status || 500;
+      ctx.type = 'html';
+      ctx.body = '<p>Something <em>exploded</em>, please contact Maru.</p>';
+      // since we handled this manually we'll
+      // want to delegate to the regular app
+      // level error handling as well so that
+      // centralized still functions correctly.
+      ctx.app.emit('error', err, ctx);
+    }
+  });
+  
+// response && routes
+app.use(router.routes(), router.allowedMethods());
+  
+// error handler
+app.on('error', function(err) {
+    if (process.env.NODE_ENV != 'test') {
+        console.log('sent error %s to the cloud', err.message);
+        console.log(err);
+    }
+});
 
-onerror(app);
+
 console.log('now print the config:');
 console.log(config);
 const port = parseInt(config.server_port);
