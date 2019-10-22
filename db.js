@@ -4,9 +4,7 @@ const env = new lmdb.Env();
 env.open({ 
     path: './mydata',
     maxDbs: 10, 
-    mapSize: 16 * 1024 * 1024 * 1024,
-    noMetaSync: true,
-    noSync: true 
+    mapSize: 16 * 1024 * 1024 * 1024
 });
 const head = env.openDbi({ name: 'heaaad', create: true, keyIsString: true });
 const tail = env.openDbi({ name: 'taidal', create: true, keyIsString: true });
@@ -44,12 +42,26 @@ const divide = (x)=>{
 
 function getPrivateKey(key){
     const [k1,k2] = divide(key);
+    let v1=[];
+    let v2=[];
     let txn = env.beginTxn({ readOnly: true });
-    console.log(txn.getString(head,'kd'));
-    let v1 = txn.getString(head, k1);
-    let v2 = txn.getString(tail, k2)
-    txn.commit();
-    return {v1, v2}
+    let cursor1 = new lmdb.Cursor(txn, head);
+    let cursor2 = new lmdb.Cursor(txn, tail);
+    for (var found = (cursor1.goToRange(k1) === k1); found !== null; found = cursor1.goToNextDup()) {
+        cursor1.getCurrentBinary(function(k, d) {
+            v1.push(d.toString());
+        });
+    }
+
+    for (var found = (cursor2.goToRange(k2) === k2); found !== null; found = cursor2.goToNextDup()) {
+        cursor2.getCurrentBinary(function(k, d) {
+            v2.push(d.toString());
+        });
+    }
+    cursor1.close();
+    cursor2.close();
+    txn.abort();
+    return {v1,v2}
 }
 
 // function randomString (length) {
@@ -60,8 +72,8 @@ function getPrivateKey(key){
 //     return result;
 // }
 
-(async ()=>{console.log(await batchInsert('kdjk','skdjkhgghffdffksjf'))})()
-console.log(getPrivateKey('kdpk'))
+// (async ()=>{console.log(await batchInsert('kdjk','skdjkjhghuuhghffdffksjf'))})()
+// console.log(getPrivateKey('kdjk'))
 
 module.exports={
     batchInsert, getPrivateKey
